@@ -17,6 +17,7 @@ MATRIX = 8
 BLE_NAME = "Matrix 8x8"
 SERVICE_UUID = bluetooth.UUID("19B10000-E8F2-537E-4F6C-D104768A1214")
 CHAR_UUID = bluetooth.UUID("19B10001-E8F2-537E-4F6C-D104768A1214")
+LOG_CHAR_UUID = bluetooth.UUID("19B10002-E8F2-537E-4F6C-D104768A1214")
 _IRQ_CENTRAL_CONNECT = const(1)
 _IRQ_CENTRAL_DISCONNECT = const(2)
 _IRQ_GATTS_WRITE = const(3)
@@ -29,6 +30,9 @@ stop_flag = False
 connected = False
 cmd_buffer = bytearray(200)
 cmd_handle = None
+error_buffer = bytearray(200)
+error_handle = None
+last_error = ""
 pending_clear = False
 
 def xy(x, y):
@@ -64,16 +68,21 @@ def check_stop(secs):
 # ===== BLE =====
 
 def init_ble():
-    global ble, cmd_handle
+    global ble, cmd_handle, error_handle
     ble = bluetooth.BLE()
     ble.active(True)
     ble.irq(ble_irq)
-    ((cmd_handle,), ) = ble.gatts_register_services([(
+    ((cmd_handle, error_handle), ) = ble.gatts_register_services([(
         SERVICE_UUID,
-        ((CHAR_UUID, bluetooth.FLAG_WRITE | bluetooth.FLAG_WRITE_NO_RESPONSE),),
+        (
+            (CHAR_UUID, bluetooth.FLAG_WRITE | bluetooth.FLAG_WRITE_NO_RESPONSE),
+            (LOG_CHAR_UUID, bluetooth.FLAG_READ | bluetooth.FLAG_NOTIFY),
+        ),
     )])
     ble.gatts_set_buffer(cmd_handle, 200)
     ble.gatts_write(cmd_handle, cmd_buffer)
+    ble.gatts_set_buffer(error_handle, 200)
+    ble.gatts_write(error_handle, error_buffer)
     name_bytes = BLE_NAME.encode()
     adv = (b'\x02\x01\x06' + bytes([len(name_bytes) + 1, 0x09]) + name_bytes)
     ble.gap_advertise(500000, adv_data=adv)
@@ -612,7 +621,15 @@ def main():
                 try:
                     func()
                 except Exception as e:
-                    pass
+                    err = f"ERR: {pending} - {e}"
+                    print(err)
+                    global last_error
+                    last_error = err
+                    try:
+                        ble.gatts_write(error_handle, err.encode()[:200])
+                        ble.gatts_notify(0, error_handle, error_buffer[:len(err)])
+                    except:
+                        pass
                 finally:
                     current_anim = None
             else:
