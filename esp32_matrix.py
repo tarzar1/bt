@@ -31,6 +31,8 @@ stop_flag = False
 connected = False
 cmd_buffer = bytearray(200)
 cmd_handle = None
+rx_buffer = bytearray(200)
+rx_len = 0
 error_buffer = bytearray(200)
 error_handle = None
 last_error = ""
@@ -90,39 +92,59 @@ def init_ble():
     return ble
 
 def ble_irq(event, data):
-    global ble, connected, stop_flag, pending_anim, brightness, speed_val, pending_clear
+    global ble, connected, stop_flag, pending_anim, brightness, speed_val, pending_clear, rx_len
     if event == _IRQ_CENTRAL_CONNECT:
         connected = True
+        rx_len = 0
+        print("[BLE] CONECTADO")
     elif event == _IRQ_CENTRAL_DISCONNECT:
         connected = False
         stop_flag = True
         pending_anim = None
         pending_clear = True
+        rx_len = 0
+        print("[BLE] DESCONECTADO")
     elif event == _IRQ_GATTS_WRITE:
         _, attr_handle = data
         raw = ble.gatts_read(attr_handle)
+        for i in range(len(raw)):
+            if raw[i] == 0:
+                break
+            rx_buffer[rx_len] = raw[i]
+            rx_len += 1
+            if rx_len >= 200:
+                rx_len = 0
         try:
-            text = raw.decode('utf-8', 'replace').strip('\x00').strip()
+            text = rx_buffer[:rx_len].decode('utf-8', 'replace')
             cmd = json.loads(text)
+            rx_len = 0
         except:
             return
+        print("[BLE] RX:", repr(cmd))
         t = cmd.get('t', '')
         if t == 'anim':
             name = cmd.get('n', '')
             if name in ANIMATIONS:
                 stop_flag = True
                 pending_anim = name
+                print("[BLE] -> ANIM:", name)
+            else:
+                print("[BLE] -> ANIM DESCONOCIDA:", name)
         elif t == 'bri':
             brightness = max(1, min(100, int(cmd.get('v', 100))))
+            print("[BLE] -> BRILLO:", brightness)
         elif t == 'spd':
             speed_val = max(10, min(300, int(cmd.get('v', 100))))
+            print("[BLE] -> VELOCIDAD:", speed_val)
         elif t == 'stop':
             stop_flag = True
             pending_anim = None
+            print("[BLE] -> STOP")
         elif t == 'clear':
             stop_flag = True
             pending_anim = None
             pending_clear = True
+            print("[BLE] -> CLEAR")
         elif t == 'custom':
             stop_flag = True
             pending_anim = None
@@ -616,20 +638,23 @@ def main():
             name = pending_anim
             pending_anim = None
             stop_flag = False
+            print("[MAIN] Reproduciendo:", name)
 
             func = ANIMATIONS.get(name)
             if func:
                 try:
                     func()
+                    print("[MAIN] Anim terminada:", name)
                 except Exception as e:
                     err = f"ERR:{name}:{e}"
-                    print(err)
+                    print("[MAIN]", err)
                     try:
                         ble.gatts_write(error_handle, err.encode()[:200])
                         ble.gatts_notify(0, error_handle, error_buffer[:len(err)])
                     except:
                         pass
             else:
+                print("[MAIN] Anim no encontrada:", name)
                 time.sleep(0.05)
 
         else:
