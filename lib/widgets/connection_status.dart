@@ -9,24 +9,31 @@ class ConnectionStatusWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(connectionStateProvider);
+    final isDemo = ref.watch(isDemoModeProvider);
 
-    final icon = switch (state) {
-      BleConnectionState.connected => Icons.bluetooth_connected,
-      BleConnectionState.connecting => Icons.bluetooth_searching,
-      BleConnectionState.disconnected => Icons.bluetooth_disabled,
-    };
+    final icon = isDemo
+        ? Icons.preview
+        : switch (state) {
+            BleConnectionState.connected => Icons.bluetooth_connected,
+            BleConnectionState.connecting => Icons.bluetooth_searching,
+            BleConnectionState.disconnected => Icons.bluetooth_disabled,
+          };
 
-    final label = switch (state) {
-      BleConnectionState.connected => 'Conectado',
-      BleConnectionState.connecting => 'Conectando...',
-      BleConnectionState.disconnected => 'Desconectado',
-    };
+    final label = isDemo
+        ? 'Modo Demo'
+        : switch (state) {
+            BleConnectionState.connected => 'Conectado',
+            BleConnectionState.connecting => 'Conectando...',
+            BleConnectionState.disconnected => 'Desconectado',
+          };
 
-    final color = switch (state) {
-      BleConnectionState.connected => const Color(0xFF00E676),
-      BleConnectionState.connecting => const Color(0xFFFFB800),
-      BleConnectionState.disconnected => const Color(0xFFFF3B5C),
-    };
+    final color = isDemo
+        ? const Color(0xFF00BCD4)
+        : switch (state) {
+            BleConnectionState.connected => const Color(0xFF00E676),
+            BleConnectionState.connecting => const Color(0xFFFFB800),
+            BleConnectionState.disconnected => const Color(0xFFFF3B5C),
+          };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

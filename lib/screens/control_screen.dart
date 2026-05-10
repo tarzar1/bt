@@ -13,18 +13,11 @@ class ControlScreen extends ConsumerWidget {
     final brightness = ref.watch(brightnessProvider);
     final speed = ref.watch(speedProvider);
     final current = ref.watch(currentAnimProvider);
+    final isDemo = ref.watch(isDemoModeProvider);
     final svc = ref.read(bleServiceProvider);
+    final connNotifier = ref.read(connectionStateProvider.notifier);
 
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF0A1628), Color(0xFF061220)],
-        ),
-      ),
-      child: SafeArea(
-        child: SingleChildScrollView(
+    return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
@@ -109,17 +102,33 @@ class ControlScreen extends ConsumerWidget {
                       const Icon(Icons.play_circle,
                           color: Color(0xFF00D97E), size: 20),
                       const SizedBox(width: 8),
-                      Text('Reproduciendo: $current',
-                          style: const TextStyle(
-                              color: Color(0xFF00D97E),
-                              fontWeight: FontWeight.w600)),
+                      Expanded(
+                        child: Text('Reproduciendo: $current',
+                            style: const TextStyle(
+                                color: Color(0xFF00D97E),
+                                fontWeight: FontWeight.w600)),
+                      ),
                     ],
+                  ),
+                ),
+              const SizedBox(height: 12),
+              if (isDemo)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => connNotifier.exitDemoMode(),
+                    icon: const Icon(Icons.arrow_back, size: 18),
+                    label: const Text('Cerrar Demo'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFFF3B5C),
+                      side: const BorderSide(color: Color(0xFFFF3B5C)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
                   ),
                 ),
             ],
           ),
-        ),
-      ),
     );
   }
 }

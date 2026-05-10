@@ -24,7 +24,9 @@ class MatrixSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Material(
+      type: MaterialType.transparency,
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
@@ -55,6 +57,7 @@ class MatrixSlider extends StatelessWidget {
           ),
         ),
       ],
+    ),
     );
   }
 }

@@ -64,8 +64,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
           colors: [Color(0xFF0A1628), Color(0xFF061220)],
         ),
       ),
-      child: SafeArea(
-        child: Column(
+      child: Column(
           children: [
             const SizedBox(height: 40),
             AnimatedBuilder(
@@ -126,6 +125,25 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: 220,
+              height: 40,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  ref.read(connectionStateProvider.notifier).enterDemoMode();
+                },
+                icon: const Icon(Icons.preview, size: 18),
+                label: const Text('Probar UI sin conectar'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF00D97E),
+                  side: const BorderSide(color: Color(0xFF00D97E), width: 1),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  textStyle: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
             const SizedBox(height: 32),
             const Divider(color: Color(0xFF1A2A3A), height: 1),
             Expanded(
@@ -158,7 +176,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
             ),
           ],
         ),
-      ),
     );
   }
 }

@@ -72,11 +72,14 @@ class MatrixShell extends ConsumerWidget {
           svc.disconnect();
         }
       },
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 350),
-        child: state == BleConnectionState.connected
-            ? const ControlScreen(key: ValueKey('control'))
-            : const ScanScreen(key: ValueKey('scan')),
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A1628),
+        body: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          child: state == BleConnectionState.connected
+              ? const ControlScreen(key: ValueKey('control'))
+              : const ScanScreen(key: ValueKey('scan')),
+        ),
       ),
     );
   }

@@ -17,7 +17,21 @@ class ConnectionNotifier extends StateNotifier<BleConnectionState> {
 
   Future<void> connect(BluetoothDevice d) => _svc.connect(d);
   Future<void> disconnect() => _svc.disconnect();
+
+  void enterDemoMode() { _demo = true; state = BleConnectionState.connected; }
+  void exitDemoMode() {
+    _demo = false;
+    _svc.disconnect();
+    state = BleConnectionState.disconnected;
+  }
+
+  bool _demo = false;
+  bool get isDemo => _demo;
 }
+
+final isDemoModeProvider = Provider<bool>((ref) {
+  return ref.read(connectionStateProvider.notifier).isDemo;
+});
 
 final brightnessProvider = StateProvider<int>((ref) => 50);
 final speedProvider = StateProvider<int>((ref) => 100);
