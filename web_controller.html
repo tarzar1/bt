@@ -86,11 +86,28 @@ input[type=range].speed-slider::-webkit-slider-thumb{background:var(--warn)}
 <div id="scanView" class="connect-area container">
   <span class="bt-icon">📡</span>
   <h2>Conectar a Matrix LED</h2>
-  <p>Enciende tu ESP32 y presiona conectar.<br>Solo funciona en Chrome / Edge (Web Bluetooth).</p>
-  <button class="btn btn-primary" onclick="connect()" style="font-size:16px;padding:14px 40px">
-    🔗 Conectar via BLE
-  </button>
-  <p style="margin-top:16px;font-size:11px;color:var(--muted)">Busca "Matrix 8x8"</p>
+  <p>Elige modo WiFi (HTTP) o Bluetooth (BLE)</p>
+
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;align-items:center">
+    <!-- WiFi -->
+    <div style="background:var(--card);border-radius:14px;padding:20px;max-width:320px;border:2px solid var(--primary)">
+      <div style="font-size:20px;margin-bottom:8px">📶 WiFi</div>
+      <input type="text" id="wifiIP" placeholder="IP del ESP32 (ej: 192.168.1.100)"
+        style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:#fff;font-size:13px;text-align:center">
+      <button class="btn btn-primary" onclick="connectWiFi()" style="margin-top:10px;width:100%">
+        🔗 Conectar via WiFi
+      </button>
+    </div>
+
+    <!-- BLE -->
+    <div style="background:var(--card);border-radius:14px;padding:20px;max-width:320px;border:2px solid var(--border)">
+      <div style="font-size:20px;margin-bottom:8px">🔵 Bluetooth</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Solo Chrome/Edge. Busca "Matrix 8x8"</p>
+      <button class="btn btn-outline" onclick="connectBLE()" style="width:100%">
+        🔍 Escanear BLE
+      </button>
+    </div>
+  </div>
 </div>
 
 <div id="controlView" class="hidden container">
@@ -141,65 +158,99 @@ let device = null;
 let char = null;
 let currentAnim = null;
 let selectedCategory = 'all';
+let mode = null;  // 'wifi' or 'ble'
+let wifiIP = '';
 
-// === CATEGORIES ===
-const CATEGORIES = [
-  {id:'all',name:'🌟 Todo',icon:'🌈'},
-  {id:'rainbow',name:'Arcoiris',icon:'🌈'},
-  {id:'waves',name:'Ondas',icon:'🌊'},
-  {id:'fire',name:'Fuego',icon:'🔥'},
-  {id:'geometric',name:'Geometría',icon:'💎'},
-  {id:'particles',name:'Partículas',icon:'✨'},
-  {id:'sweep',name:'Barrido',icon:'↔️'},
-  {id:'plasma',name:'Plasma',icon:'🌀'},
-  {id:'spiral',name:'Espiral',icon:'🐚'},
-  {id:'chaos',name:'Caos',icon:'⚡'},
-  {id:'matrix',name:'Matrix',icon:'🟢'},
-  {id:'pulse',name:'Pulso',icon:'💓'},
-  {id:'snake',name:'Serpiente',icon:'🐍'},
-  {id:'nature',name:'Naturaleza',icon:'🌿'},
-  {id:'space',name:'Espacio',icon:'🚀'},
-  {id:'retro',name:'Retro',icon:'👾'},
-  {id:'pattern',name:'Patrones',icon:'🧩'},
-  {id:'color',name:'Color Pop',icon:'🎨'},
-  {id:'neon',name:'Neón',icon:'💜'},
-  {id:'gradient',name:'Gradiente',icon:'🌅'},
-];
+// === CONNECTION ===
+function connectWiFi() {
+  const ip = document.getElementById('wifiIP').value.trim();
+  if (!ip) { log('⚠️ Ingresa la IP del ESP32',''); return; }
+  wifiIP = ip;
+  mode = 'wifi';
+  setStatus('●', 'WiFi ' + ip, 'status-ok');
+  log('📶 Conectado via WiFi a ' + ip,'rx');
+  document.getElementById('scanView').classList.add('hidden');
+  document.getElementById('controlView').classList.remove('hidden');
+}
 
-// === PROCEDURAL ANIMATION GENERATOR ===
-const COLORS_WHEEL = ['#ff0000','#ff7700','#ffff00','#00ff00','#00ffff','#0066ff','#7700ff','#ff00ff',
-  '#ff3366','#33ff66','#3366ff','#ff6633','#66ff33','#6633ff','#ffcc00','#00ffcc',
-  '#ff0066','#6600ff','#ccff00','#00ccff','#ff8800','#8800ff','#ff0088','#0088ff'];
+async function connectBLE() {
+  try {
+    setStatus('⏳', 'Escaneando...', 'status-wait');
+    log('🔍 Buscando Matrix 8x8 via BLE...','');
 
-const NAMES_ESP32 = [
-  'Arcoiris','Ola de colores','Lluvia','Corazon','Snake','Explosion','Espiral',
-  'Fuego / Plasma','VU Meter','Cubo 3D','Estrella fugaz','Torbellino','Ondas',
-  'Ajedrez','Escalera','Pacman','Game of Life','Navidad','Pixel x Pixel',
-  'Sweep H','Sweep V','Morse','Caos','Rebote','Ruleta'
-];
-
-function generateAnimations() {
-  const anims = [];
-
-  // 25 ESP32 native animations (sent by name)
-  const NATIVE_CATS = {
-    'Arcoiris':'rainbow','Ola de colores':'waves','Lluvia':'particles','Corazon':'pulse',
-    'Snake':'snake','Explosion':'fire','Espiral':'spiral','Fuego / Plasma':'plasma',
-    'VU Meter':'sweep','Cubo 3D':'geometric','Estrella fugaz':'particles',
-    'Torbellino':'spiral','Ondas':'waves','Ajedrez':'pattern','Escalera':'pattern',
-    'Pacman':'retro','Game of Life':'matrix','Navidad':'nature','Pixel x Pixel':'color',
-    'Sweep H':'sweep','Sweep V':'sweep','Morse':'retro','Caos':'chaos','Rebote':'particles',
-    'Ruleta':'geometric'
-  };
-
-  for (const n of NAMES_ESP32) {
-    const cat = NATIVE_CATS[n] || 'all';
-    anims.push({
-      id: n, name: n, type: 'native',
-      category: cat, cmd: {t:'anim',n:n},
-      color: COLORS_WHEEL[anims.length % COLORS_WHEEL.length]
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{name: 'Matrix 8x8'}],
+      optionalServices: [SERVICE_UUID]
     });
+
+    log('📱 Dispositivo encontrado, conectando...','');
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    char = await service.getCharacteristic(CHAR_UUID);
+    mode = 'ble';
+
+    setStatus('●', 'Conectado BLE', 'status-ok');
+    log('✅ Conectado BLE!','rx');
+
+    document.getElementById('scanView').classList.add('hidden');
+    document.getElementById('controlView').classList.remove('hidden');
+
+    device.addEventListener('gattserverdisconnected', () => {
+      setStatus('●', 'Desconectado', 'status-err');
+      log('🔌 BLE Desconectado','');
+      char = null;
+      mode = null;
+      currentAnim = null;
+      document.getElementById('scanView').classList.remove('hidden');
+      document.getElementById('controlView').classList.add('hidden');
+      renderGrid();
+    });
+
+  } catch(e) {
+    log('❌ Error BLE: ' + e.message,'');
+    setStatus('●', 'Error', 'status-err');
+    console.error(e);
   }
+}
+
+async function sendCmd(cmd) {
+  if (mode === 'wifi') {
+    try {
+      const json = JSON.stringify(cmd);
+      log(`📤 [WiFi] ${json}`,'tx');
+      const resp = await fetch(`http://${wifiIP}/cmd`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: json
+      });
+      const result = await resp.text();
+      log(`📥 HTTP ${resp.status}: ${result}`,'rx');
+    } catch(e) {
+      log('❌ WiFi error: ' + e.message,'');
+    }
+    return;
+  }
+
+  if (mode === 'ble') {
+    if (!char) { log('❌ BLE no conectado',''); return; }
+    try {
+      const json = JSON.stringify(cmd);
+      const encoder = new TextEncoder();
+      const data = encoder.encode(json);
+      log(`📤 [BLE] ${json}`,'tx');
+
+      const MTU = 20;
+      for (let i = 0; i < data.length; i += MTU) {
+        await char.writeValueWithoutResponse(data.slice(i, i + MTU));
+      }
+    } catch(e) {
+      log('❌ Error BLE send: ' + e.message,'');
+    }
+    return;
+  }
+
+  log('❌ No conectado','');
+}
 
   // Speed variations for each native (25 anims x 3 speeds = 75 more)
   const speeds = [50, 150, 250];
