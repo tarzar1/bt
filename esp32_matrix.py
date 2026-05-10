@@ -63,7 +63,7 @@ def check_stop(secs):
 # ===== BLE =====
 
 def init_ble():
-    global cmd_handle
+    global ble, cmd_handle
     ble = bluetooth.BLE()
     ble.active(True)
     ble.irq(ble_irq)
@@ -79,7 +79,7 @@ def init_ble():
     return ble
 
 def ble_irq(event, data):
-    global connected, stop_flag, current_anim, brightness, speed_val
+    global ble, connected, stop_flag, current_anim, brightness, speed_val
     if event == _IRQ_CENTRAL_CONNECT:
         connected = True
     elif event == _IRQ_CENTRAL_DISCONNECT:
