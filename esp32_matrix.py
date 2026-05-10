@@ -440,7 +440,8 @@ def a_pacman():
             for x in range(8):
                 if random.random() < 0.3:
                     np[xy(x,y)] = scale(wheel(random.randint(0,255)), brightness)
-        np.write(); check_stop(2)
+        np.write()
+        if check_stop(1.5): return
 
 @anim("Game of Life")
 def a_life():
@@ -472,6 +473,7 @@ def a_xmas():
         [0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],
     ]
     while not stop_flag:
+        clear_matrix()
         for y in range(8):
             for x in range(8):
                 if tree[y][x]:
@@ -491,7 +493,7 @@ def a_pixel():
         np[xy(x, y)] = scale(colors[i], brightness)
         np.write()
         if check_stop(0.04 / (speed_val/100)): return
-    check_stop(2)
+    if check_stop(1.5): return
 
 @anim("Sweep H")
 def a_sweep_h():
