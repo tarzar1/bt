@@ -1,19 +1,11 @@
-# ESP32-C3 + Matrix WS2812B 8x8 - Emoji WiFi Controller
-import gc, json, math, time, network, socket
+import json, math, time, network, socket
 from machine import Pin
 import neopixel
 
-LED_PIN = Pin(2)
-NUM_LEDS = 64
-MATRIX = 8
-WIFI_SSID = 'klk'
-WIFI_PASS = 'C0ntr4s3n@'
-HTTP_PORT = 80
-
+LED_PIN = Pin(2); NUM_LEDS = 64; MATRIX = 8
+WIFI_SSID = 'klk'; WIFI_PASS = 'C0ntr4s3n@'
 np = neopixel.NeoPixel(LED_PIN, NUM_LEDS)
-brightness_val = 80
-auto_cycle = True
-selected_emoji = None
+bri = 80; auto = True; sel = None; tick = 0
 
 def xy(x, y):
     return y * MATRIX + (MATRIX - 1 - x) if y % 2 else y * MATRIX + x
@@ -22,238 +14,100 @@ def clear():
     for i in range(NUM_LEDS): np[i] = (0, 0, 0)
     np.write()
 
-def wheel(pos):
-    pos = pos % 256
-    if pos < 85: return (255-pos*3, pos*3, 0)
-    elif pos < 170: pos -= 85; return (0, 255-pos*3, pos*3)
-    else: pos -= 170; return (pos*3, 0, 255-pos*3)
-
-def draw_pixels(px, clr, br=1.0):
-    c = tuple(int(v*br) for v in clr)
+def draw(px, clr):
     for y in range(8):
         for x in range(8):
-            np[xy(x,y)] = c if px[y][x] else (0,0,0)
+            np[xy(x,y)] = tuple(int(v*bri/100) for v in clr) if px[y][x] else (0,0,0)
     np.write()
 
-def rgb(r,g,b):
-    return tuple(int(v * brightness_val/100) for v in (r,g,b))
+EMOJIS = {
+    'Smiley': ([[0,0,0,0,0,0,0,0],[0,1,1,0,0,1,1,0],[0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[0,0,1,0,0,1,0,0],[0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0]], (255,220,0)),
+    'Skull': ([[0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[1,0,1,0,0,1,0,1],[1,0,1,0,0,1,0,1],[0,1,0,1,1,0,1,0],[0,0,1,1,1,1,0,0],[0,0,1,0,0,1,0,0],[0,1,1,1,1,1,1,0]], (255,255,255)),
+    'Ghost': ([[0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[1,0,1,0,0,1,0,1],[1,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],[1,0,0,1,1,0,0,1],[0,0,0,0,0,0,0,0]], (200,200,255)),
+    'Estrella': ([[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],[0,0,1,0,0,1,0,0],[0,1,0,0,0,0,1,0]], (255,220,0)),
+    'Invader': ([[0,0,0,1,1,0,0,0],[0,1,0,1,1,0,1,0],[0,1,0,1,1,0,1,0],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,0,1,1,1,1,0,1],[0,0,1,0,0,1,0,0],[0,1,0,0,0,0,1,0]], (0,255,100)),
+    'Sol': ([[0,0,1,0,0,1,0,0],[1,0,0,1,1,0,0,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,0,0,1,1,0,0,1],[0,0,1,0,0,1,0,0]], (255,200,0)),
+    'Luna': ([[0,1,1,1,1,0,0,0],[1,0,0,0,1,1,0,0],[0,0,0,0,0,1,1,0],[0,0,0,0,0,0,1,0],[0,0,0,0,0,0,1,0],[0,0,0,0,0,1,1,0],[0,0,0,1,1,1,0,0],[0,0,0,0,0,0,0,0]], (255,255,180)),
+    'Diamante': ([[0,0,0,1,1,0,0,0],[0,0,1,0,0,1,0,0],[0,1,0,0,0,0,1,0],[1,0,1,0,0,1,0,1],[0,1,0,0,0,0,1,0],[0,0,1,0,0,1,0,0],[0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0]], (100,200,255)),
+    'Corona': ([[0,1,0,0,0,0,1,0],[1,1,1,0,0,1,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0]], (255,215,0)),
+    'Hongo': ([[0,0,1,1,1,1,0,0],[0,1,1,0,0,1,1,0],[1,1,0,0,0,0,1,1],[1,1,1,1,1,1,1,1],[0,0,1,1,1,1,0,0],[0,0,1,1,1,1,0,0],[0,0,1,1,1,1,0,0],[0,0,0,0,0,0,0,0]], (255,50,50)),
+    'Alien': ([[0,0,1,1,1,1,0,0],[0,1,1,0,0,1,1,0],[1,0,0,0,0,0,0,1],[1,0,1,0,0,1,0,1],[0,1,1,1,1,1,1,0],[0,0,1,0,0,1,0,0],[0,0,1,0,0,1,0,0],[0,1,0,1,1,0,1,0]], (100,255,100)),
+    'Casa': ([[0,0,0,1,1,1,0,0],[0,0,1,1,1,1,1,0],[0,1,1,1,1,1,1,1],[1,1,1,0,0,1,1,1],[1,1,1,0,0,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,1,1,0,0,1,1,0]], (180,100,50)),
+    'Auto': ([[0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[0,0,0,0,0,0,0,0],[1,1,1,1,1,1,1,1],[0,1,0,0,0,0,1,0],[1,1,0,1,1,0,1,1],[0,0,1,0,0,1,0,0],[0,0,0,0,0,0,0,0]], (255,80,80)),
+    'Trofeo': ([[0,0,1,1,1,1,0,0],[0,1,1,0,0,1,1,0],[1,0,0,1,1,0,0,1],[0,0,1,0,0,1,0,0],[0,0,1,0,0,1,0,0],[0,0,1,1,1,1,0,0],[0,0,1,1,1,1,0,0],[1,1,1,1,1,1,1,1]], (255,200,0)),
+    'Paraguas': ([[0,1,1,1,1,1,1,0],[1,0,1,0,1,0,1,0],[1,1,1,1,1,1,1,1],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,1,0,0,1,0,0],[0,1,0,0,0,0,0,0]], (80,80,255)),
+    'Robot': ([[0,1,1,1,1,1,1,0],[1,0,1,0,0,1,0,1],[1,0,0,1,1,0,0,1],[0,1,1,1,1,1,1,0],[0,0,1,0,0,1,0,0],[0,1,1,0,0,1,1,0],[0,1,0,0,0,0,1,0],[0,1,1,0,0,1,1,0]], (180,180,180)),
+    'Nota': ([[0,0,1,1,0,0,0,0],[0,0,1,0,1,0,0,0],[0,0,1,0,0,1,0,0],[0,0,1,0,0,1,0,0],[0,0,1,0,0,1,0,0],[0,1,1,0,0,1,0,0],[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,0,0]], (255,100,200)),
+    'Pirata': ([[0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[1,0,1,0,1,0,0,1],[1,0,0,0,0,0,0,1],[0,1,0,0,0,0,1,0],[0,0,1,1,1,1,0,0],[0,0,1,0,0,1,0,0],[0,1,0,1,1,0,1,0]], (255,255,255)),
+    'Corazon': ([[0,0,0,0,0,0,0,0],[0,1,1,0,0,1,1,0],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0]], (255,0,80)),
+}
 
-# 20 EMOJI PIXEL ART
-EMOJIS = {}
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
+if not wlan.isconnected():
+    print('WiFi: connecting...')
+    wlan.connect(WIFI_SSID, WIFI_PASS)
+    for _ in range(30):
+        if wlan.isconnected(): break
+        time.sleep(0.5)
+if wlan.isconnected():
+    ip = wlan.ifconfig()[0]
+    print('WiFi: ' + ip)
+else:
+    print('WiFi FAIL')
+    for i in range(NUM_LEDS): np[i] = (40, 0, 0)
+    np.write()
 
-def emoji(name, color):
-    def dec(fn):
-        EMOJIS[name] = (fn(), color)
-    return dec
+srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+srv.bind(('0.0.0.0', 80))
+srv.listen(1)
+srv.settimeout(0.05)
 
-@emoji('Smiley', (255,220,0))
-def _(): return [
-    [0,0,0,0,0,0,0,0],[0,1,1,0,0,1,1,0],[0,0,0,0,0,0,0,0],
-    [0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[0,0,1,0,0,1,0,0],
-    [0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0]]
+names = list(EMOJIS.keys())
+idx = 0
+print('HTTP ready')
 
-@emoji('Skull', (255,255,255))
-def _(): return [
-    [0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[1,0,1,0,0,1,0,1],
-    [1,0,1,0,0,1,0,1],[0,1,0,1,1,0,1,0],[0,0,1,1,1,1,0,0],
-    [0,0,1,0,0,1,0,0],[0,1,1,1,1,1,1,0]]
-
-@emoji('Ghost', (200,200,255))
-def _(): return [
-    [0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[1,0,1,0,0,1,0,1],
-    [1,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],
-    [1,0,0,1,1,0,0,1],[0,0,0,0,0,0,0,0]]
-
-@emoji('Estrella', (255,220,0))
-def _(): return [
-    [0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,1,1,1,1,1,1,0],
-    [1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],
-    [0,0,1,0,0,1,0,0],[0,1,0,0,0,0,1,0]]
-
-@emoji('Invader', (0,255,100))
-def _(): return [
-    [0,0,0,1,1,0,0,0],[0,1,0,1,1,0,1,0],[0,1,0,1,1,0,1,0],
-    [1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,0,1,1,1,1,0,1],
-    [0,0,1,0,0,1,0,0],[0,1,0,0,0,0,1,0]]
-
-@emoji('Sol', (255,200,0))
-def _(): return [
-    [0,0,1,0,0,1,0,0],[1,0,0,1,1,0,0,1],[0,1,1,1,1,1,1,0],
-    [0,0,1,1,1,1,0,0],[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],
-    [1,0,0,1,1,0,0,1],[0,0,1,0,0,1,0,0]]
-
-@emoji('Luna', (255,255,180))
-def _(): return [
-    [0,1,1,1,1,0,0,0],[1,0,0,0,1,1,0,0],[0,0,0,0,0,1,1,0],
-    [0,0,0,0,0,0,1,0],[0,0,0,0,0,0,1,0],[0,0,0,0,0,1,1,0],
-    [0,0,0,1,1,1,0,0],[0,0,0,0,0,0,0,0]]
-
-@emoji('Diamante', (100,200,255))
-def _(): return [
-    [0,0,0,1,1,0,0,0],[0,0,1,0,0,1,0,0],[0,1,0,0,0,0,1,0],
-    [1,0,1,0,0,1,0,1],[0,1,0,0,0,0,1,0],[0,0,1,0,0,1,0,0],
-    [0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0]]
-
-@emoji('Corona', (255,215,0))
-def _(): return [
-    [0,1,0,0,0,0,1,0],[1,1,1,0,0,1,1,1],[1,1,1,1,1,1,1,1],
-    [0,1,1,1,1,1,1,0],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],
-    [0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0]]
-
-@emoji('Hongo', (255,50,50))
-def _(): return [
-    [0,0,1,1,1,1,0,0],[0,1,1,0,0,1,1,0],[1,1,0,0,0,0,1,1],
-    [1,1,1,1,1,1,1,1],[0,0,1,1,1,1,0,0],[0,0,1,1,1,1,0,0],
-    [0,0,1,1,1,1,0,0],[0,0,0,0,0,0,0,0]]
-
-@emoji('Alien', (100,255,100))
-def _(): return [
-    [0,0,1,1,1,1,0,0],[0,1,1,0,0,1,1,0],[1,0,0,0,0,0,0,1],
-    [1,0,1,0,0,1,0,1],[0,1,1,1,1,1,1,0],[0,0,1,0,0,1,0,0],
-    [0,0,1,0,0,1,0,0],[0,1,0,1,1,0,1,0]]
-
-@emoji('Casa', (180,100,50))
-def _(): return [
-    [0,0,0,1,1,1,0,0],[0,0,1,1,1,1,1,0],[0,1,1,1,1,1,1,1],
-    [1,1,1,0,0,1,1,1],[1,1,1,0,0,1,1,1],[1,1,1,1,1,1,1,1],
-    [1,1,1,1,1,1,1,1],[0,1,1,0,0,1,1,0]]
-
-@emoji('Auto', (255,80,80))
-def _(): return [
-    [0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[0,0,0,0,0,0,0,0],
-    [1,1,1,1,1,1,1,1],[0,1,0,0,0,0,1,0],[1,1,0,1,1,0,1,1],
-    [0,0,1,0,0,1,0,0],[0,0,0,0,0,0,0,0]]
-
-@emoji('Trofeo', (255,200,0))
-def _(): return [
-    [0,0,1,1,1,1,0,0],[0,1,1,0,0,1,1,0],[1,0,0,1,1,0,0,1],
-    [0,0,1,0,0,1,0,0],[0,0,1,0,0,1,0,0],[0,0,1,1,1,1,0,0],
-    [0,0,1,1,1,1,0,0],[1,1,1,1,1,1,1,1]]
-
-@emoji('Paraguas', (80,80,255))
-def _(): return [
-    [0,1,1,1,1,1,1,0],[1,0,1,0,1,0,1,0],[1,1,1,1,1,1,1,1],
-    [0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],
-    [0,0,1,0,0,1,0,0],[0,1,0,0,0,0,0,0]]
-
-@emoji('Robot', (180,180,180))
-def _(): return [
-    [0,1,1,1,1,1,1,0],[1,0,1,0,0,1,0,1],[1,0,0,1,1,0,0,1],
-    [0,1,1,1,1,1,1,0],[0,0,1,0,0,1,0,0],[0,1,1,0,0,1,1,0],
-    [0,1,0,0,0,0,1,0],[0,1,1,0,0,1,1,0]]
-
-@emoji('Nota', (255,100,200))
-def _(): return [
-    [0,0,1,1,0,0,0,0],[0,0,1,0,1,0,0,0],[0,0,1,0,0,1,0,0],
-    [0,0,1,0,0,1,0,0],[0,0,1,0,0,1,0,0],[0,1,1,0,0,1,0,0],
-    [1,1,1,1,1,1,0,0],[1,1,1,1,1,1,0,0]]
-
-@emoji('Pirata', (255,255,255))
-def _(): return [
-    [0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[1,0,1,0,1,0,0,1],
-    [1,0,0,0,0,0,0,1],[0,1,0,0,0,0,1,0],[0,0,1,1,1,1,0,0],
-    [0,0,1,0,0,1,0,0],[0,1,0,1,1,0,1,0]]
-
-print(f'EMOJIS loaded: {len(EMOJIS)}')
-# ===== WIFI =====
-
-ip_addr = None
-
-def connect_wifi():
-    global ip_addr
-    wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
-    if not wlan.isconnected():
-        print("WiFi: conectando a " + WIFI_SSID + "...")
-        wlan.connect(WIFI_SSID, WIFI_PASS)
-        for _ in range(30):
-            if wlan.isconnected():
-                break
-            time.sleep(0.5)
-            print(".", end="")
-        print()
-    if wlan.isconnected():
-        ip_addr = wlan.ifconfig()[0]
-        print("WiFi: IP = " + ip_addr)
-        return True
-    print("WiFi: ERROR")
-    return False
-
-def start_server():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(('0.0.0.0', HTTP_PORT))
-    s.listen(1)
-    s.settimeout(0.05)
-    return s
-
-def http_process(server):
-    global brightness_val, auto_cycle, selected_emoji
+while True:
     try:
-        conn, addr = server.accept()
-        conn.settimeout(0.5)
+        c, a = srv.accept()
+        c.settimeout(0.3)
         try:
-            data = conn.recv(1024)
-            if data:
-                text = data.decode('utf-8', 'ignore')
-                hdr_end = text.find('\r\n\r\n')
-                body = text[hdr_end+4:].strip() if hdr_end >= 0 else ''
-                cmd = None
-                if body and body[0] == '{':
-                    try: cmd = json.loads(body)
+            d = c.recv(512)
+            if d:
+                t = d.decode('utf-8', 'ignore')
+                p = t.find('\r\n\r\n')
+                if p >= 0:
+                    bd = t[p+4:].strip()
+                    try:
+                        cmd = json.loads(bd)
+                        tp = cmd.get('t','')
+                        if tp == 'emoji':
+                            sel = cmd.get('n','')
+                            auto = False
+                        elif tp == 'bri':
+                            bri = max(1, min(100, int(cmd.get('v',80))))
+                        elif tp == 'auto':
+                            auto = not auto
+                            if auto: sel = None
                     except: pass
-                if cmd:
-                    t = cmd.get('t', '')
-                    if t == 'emoji':
-                        selected_emoji = cmd.get('n', '')
-                        print("[HTTP] Emoji: " + selected_emoji)
-                        resp = '{"ok":true}'
-                    elif t == 'bri':
-                        brightness_val = max(1, min(100, int(cmd.get('v', 80))))
-                        resp = '{"ok":true}'
-                    elif t == 'auto':
-                        auto_cycle = not auto_cycle
-                        resp = '{"ok":true,"auto":' + str(auto_cycle).lower() + '}'
-                    else:
-                        resp = '{"ok":false}'
-                    conn.send(b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n\r\n' + resp.encode())
+                c.send(b'HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\n\r\nok')
         except: pass
-        try: conn.close()
+        try: c.close()
         except: pass
     except OSError: pass
 
-def main():
-    global auto_cycle, selected_emoji, brightness_val
-    clear()
-    if not connect_wifi():
-        for i in range(NUM_LEDS): np[i] = (40, 0, 0)
-        np.write()
-        return
-    server = start_server()
-    names = list(EMOJIS.keys())
-    idx = 0
-    pulse_t = 0
-    print("HTTP: http://" + ip_addr + ":80/cmd")
-    while True:
-        http_process(server)
-        if auto_cycle:
-            pulse_t += 1
-            if pulse_t >= 50:
-                pulse_t = 0
-                idx = (idx + 1) % len(names)
-                selected_emoji = names[idx]
-        if selected_emoji and selected_emoji in EMOJIS:
-            px, clr = EMOJIS[selected_emoji]
-            s = 0.8 + 0.2 * math.sin(pulse_t * 0.3)
-            c = tuple(int(v * brightness_val / 100 * s) for v in clr)
-            for y in range(8):
-                for x in range(8):
-                    np[xy(x,y)] = c if px[y][x] else (0,0,0)
-        else:
-            b = int(10 + 8 * math.sin(pulse_t * 0.15))
-            for i in range(NUM_LEDS): np[i] = (0, 0, b)
-        np.write()
-        time.sleep(0.06)
+    tick += 1
+    if auto and tick % 50 == 0:
+        idx = (idx + 1) % len(names)
+        sel = names[idx]
 
-if __name__ == '__main__':
-    main()
+    if sel and sel in EMOJIS:
+        px, clr = EMOJIS[sel]
+        draw(px, clr)
+    else:
+        b = int(8 + 6 * __import__('math').sin(tick * 0.15))
+        for i in range(NUM_LEDS): np[i] = (0, 0, b)
+        np.write()
+
+    time.sleep(0.06)
