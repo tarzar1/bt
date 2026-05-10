@@ -23,6 +23,7 @@ _IRQ_CENTRAL_DISCONNECT = const(2)
 _IRQ_GATTS_WRITE = const(3)
 
 np = neopixel.NeoPixel(LED_PIN, NUM_LEDS)
+pending_anim = None
 current_anim = None
 brightness = 100
 speed_val = 100
@@ -89,13 +90,13 @@ def init_ble():
     return ble
 
 def ble_irq(event, data):
-    global ble, connected, stop_flag, current_anim, brightness, speed_val, pending_clear
+    global ble, connected, stop_flag, pending_anim, brightness, speed_val, pending_clear
     if event == _IRQ_CENTRAL_CONNECT:
         connected = True
     elif event == _IRQ_CENTRAL_DISCONNECT:
         connected = False
         stop_flag = True
-        current_anim = None
+        pending_anim = None
         pending_clear = True
     elif event == _IRQ_GATTS_WRITE:
         _, attr_handle = data
@@ -110,21 +111,21 @@ def ble_irq(event, data):
             name = cmd.get('n', '')
             if name in ANIMATIONS:
                 stop_flag = True
-                current_anim = name
+                pending_anim = name
         elif t == 'bri':
             brightness = max(1, min(100, int(cmd.get('v', 100))))
         elif t == 'spd':
             speed_val = max(10, min(300, int(cmd.get('v', 100))))
         elif t == 'stop':
             stop_flag = True
-            current_anim = None
+            pending_anim = None
         elif t == 'clear':
             stop_flag = True
-            current_anim = None
+            pending_anim = None
             pending_clear = True
         elif t == 'custom':
             stop_flag = True
-            current_anim = None
+            pending_anim = None
             time.sleep(0.1)
             clear_matrix()
             for p in cmd.get('d', []):
@@ -588,7 +589,7 @@ def a_roulette():
 # ===== MAIN =====
 
 def main():
-    global stop_flag, current_anim, connected, brightness, speed_val, pending_clear
+    global stop_flag, pending_anim, connected, brightness, speed_val, pending_clear
     clear_matrix()
     try:
         ble = init_ble()
@@ -611,27 +612,23 @@ def main():
             pulse += 1
             time.sleep(0.05)
 
-        elif current_anim:
-            pending = current_anim
-            current_anim = None
+        elif pending_anim:
+            name = pending_anim
+            pending_anim = None
             stop_flag = False
 
-            func = ANIMATIONS.get(pending)
+            func = ANIMATIONS.get(name)
             if func:
                 try:
                     func()
                 except Exception as e:
-                    err = f"ERR: {pending} - {e}"
+                    err = f"ERR:{name}:{e}"
                     print(err)
-                    global last_error
-                    last_error = err
                     try:
                         ble.gatts_write(error_handle, err.encode()[:200])
                         ble.gatts_notify(0, error_handle, error_buffer[:len(err)])
                     except:
                         pass
-                finally:
-                    current_anim = None
             else:
                 time.sleep(0.05)
 
