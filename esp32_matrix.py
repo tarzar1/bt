@@ -29,6 +29,7 @@ stop_flag = False
 connected = False
 cmd_buffer = bytearray(200)
 cmd_handle = None
+pending_clear = False
 
 def xy(x, y):
     return y * MATRIX + (MATRIX - 1 - x) if y % 2 else y * MATRIX + x
@@ -79,14 +80,14 @@ def init_ble():
     return ble
 
 def ble_irq(event, data):
-    global ble, connected, stop_flag, current_anim, brightness, speed_val
+    global ble, connected, stop_flag, current_anim, brightness, speed_val, pending_clear
     if event == _IRQ_CENTRAL_CONNECT:
         connected = True
     elif event == _IRQ_CENTRAL_DISCONNECT:
         connected = False
         stop_flag = True
         current_anim = None
-        clear_matrix()
+        pending_clear = True
     elif event == _IRQ_GATTS_WRITE:
         _, attr_handle = data
         raw = ble.gatts_read(attr_handle)
@@ -108,11 +109,10 @@ def ble_irq(event, data):
         elif t == 'stop':
             stop_flag = True
             current_anim = None
-            clear_matrix()
         elif t == 'clear':
             stop_flag = True
             current_anim = None
-            clear_matrix()
+            pending_clear = True
         elif t == 'custom':
             stop_flag = True
             current_anim = None
@@ -579,25 +579,35 @@ def a_roulette():
 # ===== MAIN =====
 
 def main():
-    global stop_flag, current_anim, connected, brightness, speed_val
+    global stop_flag, current_anim, connected, brightness, speed_val, pending_clear
     clear_matrix()
     try:
         ble = init_ble()
+        print("BLE: 'Matrix 8x8' listo! Esperando conexion...")
     except Exception as e:
         print(f"BLE init error: {e}")
         return
+
     pulse = 0
     while True:
+        if pending_clear:
+            pending_clear = False
+            clear_matrix()
+
         if not connected:
-            b = int(20 + 15 * math.sin(pulse * 0.1))
+            r = int(20 + 15 * math.sin(pulse * 0.1))
             for i in range(NUM_LEDS):
-                np[i] = scale((0, 0, b), brightness)
+                np[i] = scale((r, 0, 0), brightness)
             np.write()
             pulse += 1
             time.sleep(0.05)
-        elif current_anim and not stop_flag:
-            name = current_anim
-            func = ANIMATIONS.get(name)
+
+        elif current_anim:
+            pending = current_anim
+            current_anim = None
+            stop_flag = False
+
+            func = ANIMATIONS.get(pending)
             if func:
                 try:
                     func()
@@ -605,8 +615,14 @@ def main():
                     pass
                 finally:
                     current_anim = None
+            else:
+                time.sleep(0.05)
+
         else:
-            time.sleep(0.05)
+            for i in range(NUM_LEDS):
+                np[i] = scale((0, 0, 40), brightness)
+            np.write()
+            time.sleep(0.1)
 
 if __name__ == "__main__":
     main()
