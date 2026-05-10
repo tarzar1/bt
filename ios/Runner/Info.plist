@@ -49,6 +49,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Esta app usa Bluetooth para conectarse a la matriz LED 8x8</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Necesitamos Bluetooth para enviar animaciones a la matriz LED</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
