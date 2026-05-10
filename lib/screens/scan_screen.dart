@@ -32,6 +32,10 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   }
 
   Future<void> _scan() async {
+    try {
+      await FlutterBluePlus.turnOn(timeout: 5);
+    } catch (_) {}
+
     setState(() => _scanning = true);
     _results = [];
     try {
@@ -41,7 +45,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Error: $e\nVerifica permisos de Bluetooth'),
             backgroundColor: const Color(0xFFFF3B5C),
           ),
         );
